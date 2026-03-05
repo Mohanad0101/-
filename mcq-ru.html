@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Интерактивные вопросы — Сокеты</title>
+  <style>
+    body { font-family: Georgia, 'Times New Roman', serif; max-width: 720px; margin: 1.5rem auto; padding: 0 1rem; color: #24292f; line-height: 1.5; }
+    h1 { font-size: 1.35rem; border-bottom: 1px solid #d0d7de; padding-bottom: 0.4rem; }
+    .intro { margin-bottom: 1.5rem; color: #57606a; font-size: 0.95rem; }
+    .q-block { margin-bottom: 1.6rem; padding: 0.8rem; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; }
+    .q-text { font-weight: bold; margin-bottom: 0.6rem; }
+    .opt { display: block; margin: 0.35rem 0; padding: 0.45rem 0.6rem; cursor: pointer; border-radius: 4px; border: 1px solid #d0d7de; background: #fff; }
+    .opt:hover { border-color: #0969da; background: #f0f6ff; }
+    .opt.correct { background: #dafbe1; border-color: #1a7f37; }
+    .opt.wrong   { background: #ffebe9; border-color: #cf222e; }
+    .opt.reveal  { cursor: default; }
+    .opt.reveal:hover { border-color: #d0d7de; background: inherit; }
+    .feedback { margin-top: 0.4rem; font-size: 0.9rem; }
+    .feedback.correct { color: #1a7f37; }
+    .feedback.wrong  { color: #cf222e; }
+  </style>
+</head>
+<body>
+  <h1>Интерактивные вопросы: основы сетевого программирования с сокетами</h1>
+  <p class="intro">12 вопросов с одним верным ответом. Выберите ответ: неверный подсвечивается красным, правильный — зелёным. Темы: порты, сокеты, клиент/сервер, TCP/UDP. Формулировки соответствуют учебному материалу.</p>
+
+  <div id="questions"></div>
+
+  <script>
+    const data = [
+      {
+        q: "Какой диапазон портов рекомендуется использовать в учебных программах без прав администратора?",
+        opts: ["0–1023", "0–255", "1024–65535", "32768–65535"],
+        correct: 2
+      },
+      {
+        q: "Какие вызовы использует только TCP-сервер (клиент их не вызывает)?",
+        opts: ["connect, send, recv", "sendto, recvfrom", "bind, listen, accept", "socket, close"],
+        correct: 2
+      },
+      {
+        q: "Что возвращает accept() на сервере?",
+        opts: ["Новый порт для клиента", "Код результата handshake", "Сокет соединения и адрес клиента", "Байты от клиента"],
+        correct: 2
+      },
+      {
+        q: "Почему перед отправкой текста по сокету нужно вызвать encode()?",
+        opts: ["Сокеты передают байты, а не строки", "Чтобы сжать данные", "Чтобы проверить кодировку", "Чтобы установить протокол"],
+        correct: 0
+      },
+      {
+        q: "Может ли recv(1024) вернуть меньше 1024 байт?",
+        opts: ["Нет, всегда ровно 1024", "Только при закрытии соединения", "Только для UDP", "Да, ОС отдаёт столько, сколько доступно (но не более 1024)"],
+        correct: 3
+      },
+      {
+        q: "Трёхстороннее TCP-рукопожатие (SYN, SYN-ACK, ACK) выполняет:",
+        opts: ["Серверный вызов accept()", "Операционная система при вызове connect() клиентом", "Вызов listen() на сервере", "Пользовательская программа"],
+        correct: 1
+      },
+      {
+        q: "Как сделать так, чтобы сервер принимал следующих клиентов после отключения текущего?",
+        opts: ["Поместить accept() в цикл while True", "Вызвать listen() снова", "Использовать два сокета", "Вызвать bind() для каждого клиента"],
+        correct: 0
+      },
+      {
+        q: "Опция SO_REUSEADDR перед bind() позволяет:",
+        opts: ["Увеличить размер буфера", "Снова привязаться к тому же порту вскоре после закрытия сокета", "Принимать несколько клиентов на одном сокете", "Включить шифрование"],
+        correct: 1
+      },
+      {
+        q: "При истечении времени settimeout(секунды) вызовы accept() и recv() возбуждают:",
+        opts: ["socket.timeout", "ConnectionError", "BlockingIOError", "TimeoutError"],
+        correct: 0
+      },
+      {
+        q: "UDP — это протокол:",
+        opts: ["С установлением соединения", "Только для локальной сети", "Без установления соединения", "Надёжной доставки с подтверждением"],
+        correct: 2
+      },
+      {
+        q: "В UDP для получения данных и адреса отправителя используется:",
+        opts: ["recv()", "read()", "recvfrom()", "receive()"],
+        correct: 2
+      },
+      {
+        q: "Кто назначает эфемерный (временный) порт клиентскому сокету?",
+        opts: ["Операционная система при connect()", "Сервер при accept()", "Программист в коде", "Маршрутизатор"],
+        correct: 0
+      }
+    ];
+
+    const container = document.getElementById('questions');
+    data.forEach((item, qIndex) => {
+      const block = document.createElement('div');
+      block.className = 'q-block';
+      block.innerHTML = '<div class="q-text">' + (qIndex + 1) + '. ' + item.q + '</div>';
+      const wrap = document.createElement('div');
+      item.opts.forEach((text, oIndex) => {
+        const label = document.createElement('label');
+        label.className = 'opt';
+        label.setAttribute('data-correct', oIndex === item.correct);
+        label.setAttribute('data-q', qIndex);
+        label.textContent = text;
+        label.addEventListener('click', function(e) {
+          const qBlock = this.closest('.q-block');
+          if (qBlock.dataset.done) return;
+          qBlock.dataset.done = '1';
+          const opts = qBlock.querySelectorAll('.opt');
+          opts.forEach(o => { o.classList.add('reveal'); o.style.pointerEvents = 'none'; });
+          const isCorrect = this.getAttribute('data-correct') === 'true';
+          this.classList.add(isCorrect ? 'correct' : 'wrong');
+          if (!isCorrect) opts[item.correct].classList.add('correct');
+          const fb = document.createElement('div');
+          fb.className = 'feedback ' + (isCorrect ? 'correct' : 'wrong');
+          fb.textContent = isCorrect ? 'Верно.' : 'Неверно. Правильный ответ выделен зелёным.';
+          qBlock.appendChild(fb);
+        });
+        wrap.appendChild(label);
+      });
+      block.appendChild(wrap);
+      container.appendChild(block);
+    });
+  </script>
+</body>
+</html>

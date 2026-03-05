@@ -1,312 +1,672 @@
-# Basic Network Socket Programming — Lab
+# Основы сетевого программирования с сокетами
 
-This lab teaches you how programs exchange data over a network using **sockets** in Python: TCP echo server and client, pickle, UDP echo, and a simple JSON bank. The instructions below are the **full lab content**. You will **clone** (or create) a repo, **implement** the code in each folder, **record results**, and **push to your remote** so you can submit **source code + results** to your instructor.
+**Лабораторная работа (5 лабораторных): TCP echo, pickle, UDP echo, JSON «Банк»**
 
-**Source:** [fa-python-network/1_echo_server](https://github.com/fa-python-network/1_echo_server); lecture on socket programming (koroteev.site).
+В работе изучается обмен данными по сети с помощью **сокетов** в Python. Вы выполните **не более 5 лабораторных**: в каждой — одно приложение (или два небольших в одной теме). Итог: TCP-сервер и клиент, кодирование, таймауты, pickle, UDP, JSON.
 
----
+**Источник:** [fa-python-network/1_echo_server](https://github.com/fa-python-network/1_echo_server); лекции по сокетам (koroteev.site).
 
-## Workflow & submission — read this first
+> **Кратко:** 5 лабораторных (TCP echo → многоразовый сервер → таймауты → pickle + UDP → банк JSON). Порты: 9090, 9091, 9092.
 
-### What you must deliver
-
-1. **Source code** — Your implemented `server.py` and `client.py` (or only `server.py` where stated) in folders `01_tcp_echo_one` through `10_assignment6_auto_port`.
-2. **Results** — Evidence that your programs run. Put run outputs (or screenshots) in the **`results/`** folder (see below).
-3. **Identification** — Fill in **`STUDENT_INFO.txt`** with your **full name** and **group** (or student ID).
-
-You will **push the whole lab** (code + results + README + STUDENT_INFO) to **your own remote repository** and submit the **repo URL** to your instructor.
+> **Правило лаборатории:** Компьютеры общие. После проверки преподавателем удалите папку `~/socket` (см. [Очистка после сдачи](#очистка-после-сдачи-обязательно)).
 
 ---
 
-### Option A: Clone the instructor’s repo, then push to your remote
+## Как пользоваться
 
-Replace `INSTRUCTOR_REPO_URL` with the actual URL your instructor gives you (e.g. `https://github.com/instructor/basic_socket_lab`).
+1. **Создайте** папку `~/socket` и подпапки для **5 лабораторных** (см. [Структура папок](#требуемая-структура-папок)).
+2. **Прочитайте** раздел 1 (Базовые понятия).
+3. **Выполняйте** лабораторные 1–5 по порядку. Сервер запускайте первым, клиент — во втором терминале. Вывод сохраняйте в `result.txt`.
+4. **Ответьте** на контрольные вопросы раздела 3.
+5. **Отправьте** `~/socket` в репозиторий и покажите URL преподавателю.
+6. **После проверки** удалите `~/socket` на компьютере лаборатории.
+
+---
+
+## Предварительные требования
+
+- **Python 3.x** (достаточно стандартной библиотеки, дополнительные пакеты не требуются).
+- Базовые знания Python (функции, циклы, `input()`, исключения).
+- **Два окна терминала** одновременно (одно для сервера, одно для клиента).
+
+### Чек-лист перед началом
+
+Перед началом убедитесь:
+
+- [ ] Установлен Python 3.x (`python3 --version` или `python --version`).
+- [ ] Можно открыть два окна терминала (для сервера и клиента).
+- [ ] Создана папка `~/socket` и 5 подпапок лабораторных.
+- [ ] Порты 9090, 9091, 9092 свободны (остановите предыдущий сервер перед новым).
+
+---
+
+## Цели обучения
+
+К концу работы студент сможет:
+
+1. Объяснить роль **сокета** и различие между слушающим сокетом и сокетом соединения.
+2. Написать минимальный TCP-сервер (bind, listen, accept, recv, send, close) и соответствующий клиент (connect, send, recv, close).
+3. Объяснить, зачем данные нужно **кодировать** перед отправкой и **декодировать** после приёма.
+4. Сделать сервер **многоразовым** с помощью цикла по `accept()`, применить **SO_REUSEADDR** и **settimeout**.
+5. Передавать объект Python по TCP с помощью **pickle** и структурированный запрос/ответ с помощью **JSON**.
+6. Написать простой **UDP** echo-сервер и клиент с `SOCK_DGRAM`, `recvfrom` и `sendto`.
+7. Указать, какие вызовы сокетов только у сервера (`bind`, `listen`, `accept`), а какие только у клиента (`connect`).
+
+---
+
+## Структура папок и сдача работы
+
+### Где работать
+
+Вся работа выполняется в папке `socket` в **домашнем каталоге** (`~/socket`). Создайте её перед началом:
 
 ```bash
-# 1. Clone the lab repository
-git clone INSTRUCTOR_REPO_URL
-cd basic_socket_lab
-
-# 2. Implement code in each folder (01_ … 10_). Run server then client; capture results.
-# 3. Create results folder and add run outputs (see "Results" below).
-# 4. Fill in STUDENT_INFO.txt (name, group).
-
-# 5. Create your own empty repo on GitHub/GitLab (e.g. my-socket-lab), then:
-git add .
-git commit -m "Complete socket lab: source code and results"
-git remote rename origin upstream
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
-git push -u origin main
+mkdir ~/socket
+cd ~/socket
 ```
 
-If the default branch is `master` instead of `main`:
+### Требуемая структура папок
 
-```bash
-git push -u origin master
+Создайте **5 подпапок** (по одной на лабораторную). Сохраняйте структуру:
+
+```
+~/socket/
+    lab01_tcp_echo_one/           # Лаб. 1: один клиент, одно сообщение
+        server.py
+        client.py
+        result.txt
+    lab02_tcp_echo_reusable/      # Лаб. 2: много сообщений, многоразовый сервер
+        server.py
+        client.py
+        result.txt
+    lab03_tcp_echo_timeouts/      # Лаб. 3: SO_REUSEADDR и таймауты
+        server.py
+        client.py
+        result.txt
+    lab04_pickle_and_udp/         # Лаб. 4: pickle + UDP (два приложения)
+        pickle/
+            server.py
+            client.py
+        udp/
+            server.py
+            client.py
+        result.txt                 # вывод обоих приложений
+    lab05_bank_json/              # Лаб. 5: банк по JSON
+        server.py
+        client.py
+        result.txt
 ```
 
-Submit your repo URL (e.g. `https://github.com/YOUR_USERNAME/YOUR_REPO`) to your instructor.
+### result.txt — как сохранять вывод
 
----
+Запустите сервер и клиент, затем вставьте вывод обоих терминалов в `result.txt`. Пример для шага 1:
 
-### Option B: Create a new local repo and push to your remote
+```
+=== терминал сервера ===
+server is listening
+new client accepted ('127.0.0.1', 54321)
+received data hello
 
-If you received the lab as a ZIP or folder (no git history):
+=== терминал клиента ===
+echo hello
+```
+
+Файл `result.txt` — **в каждой лабораторной**. Вставьте вывод сервера и клиента; так преподаватель проверяет выполнение.
+
+### Отправка в удалённый репозиторий (обязательно)
+
+После выполнения всех 5 лабораторных отправьте папку `socket` в репозиторий GitHub или GitLab:
 
 ```bash
-# 1. Go into the lab folder (e.g. basic_socket_lab)
-cd basic_socket_lab
-
-# 2. Initialize a new repository
+cd ~/socket
 git init
-
-# 3. Implement code in each folder; add results to results/; fill STUDENT_INFO.txt.
-
-# 4. Add all files, commit, and push to your remote
 git add .
-git commit -m "Complete socket lab: source code and results"
+git commit -m "Лабораторная: основы сетевого программирования с сокетами — выполнено"
 git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+git remote add origin https://github.com/VASH_LOGIN/VASH_REPO.git
 git push -u origin main
 ```
 
-Create the empty repo `YOUR_REPO` on GitHub/GitLab first. Submit the repo URL to your instructor.
+> Подставьте вместо `VASH_LOGIN` и `VASH_REPO` свой логин и имя репозитория. Создайте пустой репозиторий на GitHub/GitLab **до** выполнения `git push`.
 
----
+Покажите преподавателю URL репозитория (например, `https://github.com/VASH_LOGIN/socket`).
 
-### Results folder (required)
+### Очистка после сдачи (обязательно)
 
-Create a folder named **`results/`** in this repo. For each step you implement, add evidence that it runs:
+Компьютеры в лаборатории общие; одной машиной пользуются несколько групп. После того как преподаватель проверил работу и выставил оценку, вы **обязаны удалить** папку `~/socket` на компьютере лаборатории. Это даёт следующей группе начать с чистого состояния и исключает путаницу или использование чужого кода. Копия в репозитории остаётся основным отчётом; удаление касается только локального компьютера в лаборатории.
 
-- **Option 1 (recommended):** Text files with terminal output, e.g. `results/01_tcp_echo_one.txt` containing the server and client output when you run Step 1.
-- **Option 2:** Screenshots (e.g. `results/01_tcp_echo_one.png`) showing the server and client running.
-
-Include at least outputs (or screenshots) for: **01**, **02**, **06** (UDP), and **07** (bank). You may include more. This shows the instructor your source code runs correctly.
-
----
-
-## What you will learn
-
-- What a **socket** is and how **server** and **client** roles differ (bind/listen/accept vs connect).
-- How a **TCP** connection is established and how data is sent and received as **bytes**.
-- Why **encode()** and **decode()** are needed for text and how to handle the **byte stream** (no built-in messages).
-- How to make a server **reusable** and how to use **timeouts** and **SO_REUSEADDR**.
-- How to send a **Python object** (e.g. a dictionary) using **pickle** and **JSON** over TCP.
-- How **UDP** differs from TCP (no connection; **recvfrom** / **sendto**).
-
----
-
-## How to use this lab
-
-1. **Read** this README from top to bottom — especially **Core concepts** and the **Folder map**.
-2. **Implement** the server and client in each folder in order (`01_` → … → `10_`). Run the **server** first, then the **client** in another terminal.
-3. **Ports:** Use **9090** for TCP echo and pickle, **9091** for UDP echo, **9092** for the bank.
-4. **Fill in `STUDENT_INFO.txt`** (name and group).
-5. **Add results** to the `results/` folder (outputs or screenshots).
-6. **Push** the whole lab to your remote repo and submit the repo URL to your instructor.
-
----
-
-## Contents
-
-| Section | Content |
-|---------|---------|
-| **1** | Core concepts (read this to understand socket programming) |
-| **2** | Practical steps (TCP echo 1–4, pickle 5, UDP echo 6, simple bank 7) |
-| **2b** | Independent assignments 4, 5, 6 (port/host, log file, auto port) |
-| **2c** | Complete the code (exercises with hints) |
-| **3** | Control questions and answers |
-| **4** | Full list of assignments for independent work |
-| **5** | Quick reference |
-
----
-
-## 1. Core concepts
-
-### Network applications and sockets
-
-**Network applications** exchange data over a network. Most use **TCP/IP**. A **socket** is the **programming interface** for this exchange. Sockets operate at **Layer 4 (Transport)** of the OSI model. The OS provides them.
-
-- A socket is identified by **(IP address, port)**.
-- A **TCP connection** involves two sockets: one on the client, one on the server (the **connection socket** returned by `accept()`).
-- **Server:** binds to a port, **listens**, and **accepts** connections. **Client:** **connects** to (host, port).
-
-In Python, use the standard module **`socket`** and create a socket with `socket.socket()`. The same call is used for both client and server; what you do next differs (bind/listen/accept vs connect).
-
-### Ports
-
-A **port** is a 16-bit number (0–65535) that identifies the application on a host. Use ports in **1024–65535** (e.g. 9090). The server **binds** the socket to a port with `bind()`. Always **close** sockets when done.
-
-### TCP: how data is exchanged
-
-**Server:** `socket()` → `bind(host, port)` → `listen()` → `accept()` (blocks until a client connects) → use the returned connection socket for `recv()` / `send()` → `close()` the connection socket.
-
-**Client:** `socket()` → `connect(host, port)` → `send()` / `recv()` → `close()`.
-
-`bind(('', port))` with an empty string means “all interfaces.” **accept()** and **recv()** are **blocking**. TCP provides a **byte stream**, not discrete messages. For **text**, use **encode()** before sending and **decode()** after receiving. If both sides call **recv()** first, they **deadlock**; typically the **client sends first**.
-
-### Improvements
-
-- **Reusable server:** Put “accept → handle → close connection” inside a **while True** loop.
-- **Avoid blocking forever:** Use **sock.settimeout(seconds)**; **accept()** and **recv()** then raise **socket.timeout**.
-- **Port “already in use” after restart:** Use **SO_REUSEADDR** before **bind()**: `sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)`.
-- **Sending objects:** Use **pickle.dumps(obj)** before send, **pickle.loads(bytes)** after recv. Use pickle only with **trusted** peers; for untrusted data use JSON.
-
-### TCP vs UDP
-
-| | TCP (SOCK_STREAM) | UDP (SOCK_DGRAM) |
-|---|-------------------|------------------|
-| Connection | Yes | No |
-| Server | listen, accept, recv/send on conn | bind, recvfrom, sendto |
-| Delivery | Reliable, in-order | No guarantee |
-
-**Key takeaways:** (1) Server binds and calls **accept()** to get a connection socket; client calls **connect()**. (2) Data on the wire is **bytes**; for text use **encode**/**decode**. (3) **recv()** returns empty bytes when the other side closes. (4) If both sides **recv()** first, they **deadlock**; client usually sends first.
-
----
-
-## 2. Practical steps
-
-Run the **server first**, then the **client**. Port **9090** for TCP, **9091** for UDP, **9092** for bank.
-
-| Steps | Topic | Port |
-|-------|--------|------|
-| 1–4 | TCP echo (one message → many → reusable → timeouts) | 9090 |
-| 5 | TCP + pickle (send/receive a dictionary) | 9090 |
-| 6 | UDP echo | 9091 |
-| 7 | Simple bank (TCP + JSON) | 9092 |
-
-### Step 1: One client, one message
-
-Server accepts one connection, receives up to 1 KB, echoes it back, closes the connection, then exits. Implement in folder **01_tcp_echo_one**.
-
-**Server:** `socket()` → `bind(('', 9090))` → `listen(1)` → `accept()` → `recv(1024)` → `send(data)` → `conn.close()`.
-
-**Client:** `socket()` → `connect(('localhost', 9090))` → `send(b"hello")` → `recv(1024)` → `close()` → `print(data.decode())`.
-
-### Step 2: One client, many messages (until "exit")
-
-Server reads in a loop until the client closes or sends `"exit"`. Client sends lines until the user types `exit`. Implement in **02_tcp_echo_many**.
-
-### Step 3: Reusable server
-
-After closing one client, the server returns to **accept()** and waits for the next. Use the same client as Step 2. Implement in **03_tcp_echo_reusable**.
-
-### Step 4: SO_REUSEADDR and timeouts
-
-**SO_REUSEADDR** before bind; **settimeout(seconds)** on the listen socket (e.g. 30) and on the connection socket (e.g. 60). Handle **socket.timeout** and **KeyboardInterrupt**. Client: settimeout(10); handle timeout and ConnectionRefusedError. Implement in **04_tcp_echo_timeouts**.
-
-### Step 5: Sending a Python dictionary with pickle
-
-**pickle.dumps(obj)** produces bytes; **pickle.loads(bytes)** restores the object. Server receives bytes, deserializes, echoes bytes back. Implement in **05_pickle_echo**. Use pickle only with trusted peers.
-
-### Step 6: UDP echo
-
-UDP is **connectionless**: no listen/accept. Server **binds** and uses **recvfrom()** / **sendto(data, addr)**. Client uses **sendto(data, (host, port))** and **recvfrom()**. Use **SOCK_DGRAM** and port **9091**. Implement in **06_udp_echo**.
-
-### Step 7: Simple bank (TCP + JSON)
-
-Client sends JSON (e.g. `{"action": "balance"}` or `{"action": "deposit", "amount": 50}`); server replies with JSON (e.g. `{"ok": true, "balance": 100}`). Implement a **Bank** class with `balance()`, `deposit(amount)`, `withdraw(amount)`. Port **9092**. Client uses **input()** for action and amount. Implement in **07_bank_json**.
-
----
-
-## Folder map — what to implement
-
-| Folder | Task | Port |
-|--------|------|------|
-| **01_tcp_echo_one** | TCP echo: one connection, one message. Server echoes one `recv` back and exits. Client sends one message (e.g. `b"hello"`), prints echo. | 9090 |
-| **02_tcp_echo_many** | TCP echo: one client, many messages until user types `"exit"`. Server loop: recv → echo; break when data is `"exit"` or connection closed. Client: input loop, send each line, print echo; break on `"exit"`. | 9090 |
-| **03_tcp_echo_reusable** | TCP echo: server accepts many clients one after another (outer `while True`: accept → handle client → close conn → repeat). Client same as Step 2. | 9090 |
-| **04_tcp_echo_timeouts** | TCP echo with SO_REUSEADDR and timeouts. Server: set SO_REUSEADDR before bind; settimeout on listen socket (e.g. 30 s) and on conn (e.g. 60 s); handle `socket.timeout` and KeyboardInterrupt. Client: settimeout (e.g. 10 s); handle timeout and ConnectionRefusedError. | 9090 |
-| **05_pickle_echo** | Send a Python dict over TCP using pickle. Server: recv bytes, `pickle.loads()`, print object, send same bytes back. Client: build a dict, `pickle.dumps()`, send, recv, `pickle.loads()`, print. | 9090 |
-| **06_udp_echo** | UDP echo. Server: SOCK_DGRAM, bind to 9091, loop recvfrom → sendto(data, addr). Client: SOCK_DGRAM, sendto to (localhost, 9091), recvfrom, print. | 9091 |
-| **07_bank_json** | Simple bank over TCP with JSON. Server: implement a `Bank` class (balance, deposit, withdraw); bind to 9092; accept one connection; recv JSON (e.g. `{"action":"balance"}` or `{"action":"deposit","amount":50}`); call bank methods; send JSON reply (e.g. `{"ok":true,"balance":100}`). Client: use `input()` for action (balance/deposit/withdraw) and amount; send one JSON request; print balance or error. | 9092 |
-| **08_assignment4_port_host** | Echo server and client with config from user. Server: ask for port (default 9090), validate 1024–65535. Client: ask for host (default localhost) and port (default 9090), then connect and echo one message. | user |
-| **09_assignment5_log** | Echo server that writes service messages to a log file (e.g. `server.log`) instead of the console. One function for logging (e.g. `log(msg)`); use it instead of `print`. Use any echo client (e.g. from 01) to test. | 9090 |
-| **10_assignment6_auto_port** | Echo server that tries ports 9090, 9091, … until bind succeeds; print the chosen port. Use SO_REUSEADDR. Client: ask user for the port the server printed, then connect and echo. | 9090+ |
-
----
-
-## 2b. Independent assignments (4, 5, 6)
-
-- **Assignment 4 (folder 08):** Server asks for port (default 9090); client asks for host (default localhost) and port. Validate port 1024–65535.
-- **Assignment 5 (folder 09):** Server writes service messages to a log file (e.g. `server.log`) instead of the console. Use a `log(msg)` function.
-- **Assignment 6 (folder 10):** Server tries ports 9090, 9091, … until bind succeeds; print the port. Use SO_REUSEADDR. Client asks for the port and connects.
-
----
-
-## 2c. Complete the code (exercises with hints)
-
-Use the concepts from Section 1. Fill in the blanks; check hints before suggested answers.
-
-- **Exercise A — Echo client (TCP):** Create socket, **connect** to ('localhost', 9090), **send** bytes, **recv(1024)**, **close**, **decode** for print. (Answers: `socket.socket()`, `connect`, `send`, `recv(1024)`, `close()`, `decode()`.)
-- **Exercise B — Reusable server:** Outer **while True:**, **accept()**, handle client, **conn.close()**.
-- **Exercise C — UDP client:** **SOCK_DGRAM**, **sendto**(data, ('localhost', 9091)), **recvfrom(1024)**.
-- **Exercise D — Encode/decode:** **send**(msg.**encode()**), **decode()** for received bytes.
-
----
-
-## 3. Control questions and answers
-
-1. **How do client and server sockets differ?** Server: bind, listen, accept (gets a new socket per client for recv/send). Client: connect, then send/recv on the same socket.
-2. **How can you transfer text through sockets?** Sockets carry bytes. Use **encode()** before sending and **decode()** after receiving; same encoding (e.g. UTF-8) on both sides.
-3. **Which socket operations block?** **accept()**, **recv()**, **connect()**; **send()** can block if the buffer is full. Use **settimeout(seconds)** to limit waiting.
-4. **What are the main differences between TCP and UDP?** TCP: connection, reliable, in-order. UDP: no connection, recvfrom/sendto, no delivery guarantee.
-5. **Which calls are server-only?** **bind()**, **listen()**, **accept()**. The client uses **connect()** and does not call bind, listen, or accept.
-6. **At what OSI layer do sockets work?** **Layer 4 — Transport layer** (TCP/UDP).
-
----
-
-## 4. Full list of assignments for independent work
-
-| # | Assignment |
-|---|------------|
-| 1 | Check connection from local, virtual, and remote machine (bind all interfaces; use server IP for remote client). |
-| 2 | Server reads in a loop until client sends "exit". |
-| 3 | Server keeps listening after a client disconnects (reusable). |
-| 4 | Port and host from user input; safe defaults and validation. |
-| 5 | Server messages to a log file. |
-| 6 | Server auto-selects port if in use; print the port. |
-| 7 | Identification server: recognize client by IP; greet by name or ask and store. |
-| 8 | Authentication: username/password, secure storage, session token. |
-| 9 | Helper functions: send/receive text with length-prefix. |
-| 10 | Multiple messages in turn (Step 2/3 style or length-prefixed). |
-| 11 | Multi-user chat (e.g. UDP broadcast). |
-
----
-
-## 5. Quick reference
-
-| Concept | Brief |
-|--------|--------|
-| **TCP server** | `socket()` → `bind()` → `listen()` → `accept()` → `recv()`/`send()` on conn → `conn.close()`; reusable: loop from `accept()`. |
-| **TCP client** | `socket()` → `connect()` → `send()`/`recv()` → `close()`. |
-| **Text** | **encode()** before send, **decode()** after recv. |
-| **Pickle** | **pickle.dumps(obj)** / **pickle.loads(bytes)**. Use only with trusted peers. |
-| **UDP** | **SOCK_DGRAM**; **recvfrom()** / **sendto(data, addr)**. No connection. |
-| **SO_REUSEADDR** | Before `bind()` so the port can be reused soon after close. |
-| **settimeout** | Limits blocking; **accept()** and **recv()** raise **socket.timeout** after the given seconds. |
-
----
-
-## Running your code
-
-In each folder, from the project root:
+**В Linux или macOS:**
 
 ```bash
-cd 01_tcp_echo_one
-python server.py
-# In another terminal:
-python client.py
+rm -rf ~/socket
 ```
-
-Then move to `02_tcp_echo_many`, and so on. Always start the **server** before the **client**.
 
 ---
 
-## Before you submit
+## 1. Базовые понятия
 
-- [ ] All folders `01_`–`10_` contain your implemented **source code**.
-- [ ] The **`results/`** folder contains run outputs (or screenshots) for at least steps 01, 02, 06, and 07.
-- [ ] **`STUDENT_INFO.txt`** is filled with your **name** and **group** (or student ID).
-- [ ] The whole lab (code + results + README + STUDENT_INFO) is pushed to **your own remote repo**.
-- [ ] You have submitted your **repo URL** to your instructor.
+### Сетевые приложения и сокеты
+
+**Сетевые приложения** обмениваются данными по сети (с другими приложениями или между частями одного приложения). Большинство использует **TCP/IP**.
+
+**Сокет** — это **программный интерфейс** на границе между прикладным уровнем (L7) и транспортным уровнем (L4) модели OSI. Сокеты предоставляются ОС; дополнительное ПО не требуется.
+
+- Сокет задаётся парой **(IP-адрес, порт)**.
+- **TCP-соединение** использует два сокета: один у клиента, один у сервера (**сокет соединения**, возвращаемый `accept()`).
+- **Сервер:** привязывается к порту, **слушает** и **принимает** соединения. **Клиент:** **подключается** к (хост, порт).
+
+В Python используется стандартный модуль **`socket`**; сокет создаётся вызовом `socket.socket()`.
+
+### Порты
+
+**Порт** — это 16-битное число (0–65535), идентифицирующее приложение на узле. Существует 65 536 TCP-портов и 65 536 UDP-портов (раздельно). Порты **0–1023** — общеизвестные (например 80, 443, 22) и обычно требуют прав администратора; используйте порты из диапазона **1024–65535** (например 9090). Сервер **привязывает** сокет к порту через `bind()`; если порт занят, `bind()` завершается ошибкой. Всегда **закрывайте** сокеты по окончании работы, иначе порт может остаться занятым (например, состояние TIME_WAIT). Файрволы могут блокировать порты.
+
+### TCP: как происходит обмен данными
+
+**Сервер:** `socket()` → `bind(host, port)` → `listen()` → `accept()` (блокируется до подключения клиента) → используйте возвращённый сокет соединения для `recv()` / `send()` → `close()` сокета соединения.
+
+**Клиент:** `socket()` → `connect(host, port)` → `send()` / `recv()` → `close()`.
+
+`bind(('', port))` с пустой строкой означает «все интерфейсы». **accept()** и **recv()** — **блокирующие**; **send()** может блокироваться при переполнении буфера отправки.
+
+TCP даёт **поток байтов**, а не отдельные сообщения. Вы читаете некоторое количество байтов; встроенных границ сообщений нет. Для **текста** используйте **encode()** перед отправкой и **decode()** после приёма (одинаковая кодировка, например UTF-8, на обеих сторонах). Если обе стороны сначала вызывают **recv()**, возникает взаимная блокировка; обычно **сначала отправляет клиент**, затем сервер принимает и отвечает.
+
+> **Поток байтов TCP:** `recv(n)` может вернуть **меньше n байтов** — ОС отдаёт столько, сколько доступно, но не более n. Для коротких сообщений достаточно одного вызова; для больших данных нужно читать в цикле до полного сообщения (например, по префиксу длины или разделителю).
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant S as Server
+  Note over S: socket(), bind(), listen()
+  Note over S: accept() — блокируется, ожидание
+  Note over C,S: TCP 3-way handshake (connect)
+  C->>S: connect()
+  Note over S: accept() возвращает сокет соединения
+  C->>S: send(data)
+  Note over S: recv() читает данные
+  S->>C: send(data)
+  Note over C: recv() читает эхо
+  C->>S: close()
+  Note over S: recv() возвращает b"" — закрыть соединение
+```
+
+> **Замечание:** `accept()` — **локальный вызов ядра**; он не отправляет сообщение клиенту. Трёхстороннее TCP-рукопожатие (SYN, SYN-ACK, ACK) выполняет ОС при вызове клиентом `connect()`. Вызов `accept()` лишь возвращает серверному процессу новый сокет соединения после завершения рукопожатия.
+
+### Улучшения
+
+- **Многоразовый сервер:** Поместите «accept → обработка → закрытие соединения» в цикл **while True**, чтобы сервер принимал следующего клиента после отключения текущего.
+- **Избежать бесконечной блокировки:** Используйте **sock.settimeout(секунды)**; тогда **accept()** и **recv()** при истечении времени возбуждают **socket.timeout** — обработайте исключение.
+- **Порт «уже занят» после перезапуска:** Перед **bind()** установите **SO_REUSEADDR**: `sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)`.
+- **Передача объектов:** По сокетам передаются байты. Чтобы отправить объект Python (например, словарь), **сериализуйте** его: **pickle.dumps(obj)** перед отправкой, **pickle.loads(bytes)** после приёма. Pickle используйте только с **доверенными** узлами; для недоверенных данных применяйте JSON.
+
+> **Порты:** После закрытия сокета порт может оставаться в состоянии **TIME_WAIT** некоторое время. `SO_REUSEADDR` позволяет снова привязаться к тому же порту сразу (например, после перезапуска сервера).
+
+### TCP и UDP
+
+| Характеристика | TCP (SOCK_STREAM) | UDP (SOCK_DGRAM) |
+|----------------|-------------------|------------------|
+| Соединение | Да (connect → поток → close) | Нет |
+| Сервер | listen, accept, recv/send по соединению | bind, recvfrom, sendto |
+| Доставка | Надёжная, с сохранением порядка | Без гарантий |
+| Типичное применение | HTTP, большинство приложений | Когда важнее скорость, чем надёжность |
+
+---
+
+## 2. Лабораторные 1–5
+
+Сначала всегда запускайте **сервер**, затем **клиент**. Порты: **9090** (TCP echo, лаб. 1–3 и pickle), **9091** (UDP), **9092** (банк).
+
+---
+
+### Лабораторная 1: Один клиент, одно сообщение
+
+Сервер принимает одно соединение, получает до 1 КБ, возвращает эхо, закрывает соединение и завершается. Минимум: один запрос — один ответ.
+
+**Сервер** (`lab01_tcp_echo_one/server.py`):
+
+```python
+import socket
+
+sock = socket.socket()
+sock.bind(('', 9090))
+sock.listen(1)
+print("server is listening")
+conn, addr = sock.accept()
+print("new client accepted", addr)
+data = conn.recv(1024)
+print("received data", data.decode())
+conn.send(data)
+conn.close()
+sock.close()
+```
+
+**Клиент** (`lab01_tcp_echo_one/client.py`):
+
+```python
+import socket
+
+sock = socket.socket()
+sock.connect(('localhost', 9090))
+sock.send(b"hello")
+data = sock.recv(1024)
+sock.close()
+print("echo", data.decode())
+```
+
+---
+
+### Лабораторная 2: Много сообщений и многоразовый сервер
+
+Один клиент может отправлять много строк (до `exit`); после отключения клиента сервер ждёт следующего (цикл по `accept()`).
+
+**Сервер** (`lab02_tcp_echo_reusable/server.py`):
+
+```python
+import socket
+
+sock = socket.socket()
+sock.bind(('', 9090))
+sock.listen(1)
+print("server is listening")
+while True:
+    conn, addr = sock.accept()
+    print("new client accepted", addr)
+    while True:
+        data = conn.recv(1024)
+        if not data:
+            break
+        print("received", data.decode())
+        if data.strip().lower() == b"exit":
+            break
+        conn.send(data)
+    conn.close()
+    print("client left, waiting for next")
+```
+
+**Клиент** (`lab02_tcp_echo_reusable/client.py`):
+
+```python
+import socket
+
+sock = socket.socket()
+sock.connect(('localhost', 9090))
+while True:
+    msg = input("message (exit to quit): ")
+    sock.send(msg.encode())
+    if msg.strip().lower() == "exit":
+        break
+    data = sock.recv(1024)
+    print("echo", data.decode())
+sock.close()
+```
+
+---
+
+### Лабораторная 3: SO_REUSEADDR и таймауты
+
+SO_REUSEADDR даёт возможность снова занять порт после перезапуска; settimeout ограничивает ожидание accept/recv, чтобы сервер не зависал.
+
+**Сервер** (`lab03_tcp_echo_timeouts/server.py`):
+
+```python
+import socket
+
+sock = socket.socket()
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+sock.bind(('', 9090))
+sock.listen(1)
+print("server is listening on 9090")
+while True:
+    try:
+        sock.settimeout(30)
+        conn, addr = sock.accept()
+        sock.settimeout(None)
+        conn.settimeout(60)
+        print("new client", addr)
+        while True:
+            try:
+                data = conn.recv(1024)
+            except socket.timeout:
+                print("timeout, closing connection")
+                break
+            if not data:
+                break
+            print("received", data.decode())
+            if data.strip().lower() == b"exit":
+                break
+            conn.send(data)
+        conn.close()
+        print("client left")
+    except socket.timeout:
+        print("no client, listening again")
+    except KeyboardInterrupt:
+        print("server stop")
+        break
+sock.close()
+```
+
+**Клиент** (`lab03_tcp_echo_timeouts/client.py`):
+
+```python
+import socket
+
+sock = socket.socket()
+sock.settimeout(10)
+try:
+    sock.connect(('localhost', 9090))
+    msg = input("message (exit to quit): ")
+    sock.send(msg.encode())
+    if msg.strip().lower() != "exit":
+        data = sock.recv(1024)
+        print("echo", data.decode())
+except socket.timeout:
+    print("timeout")
+except ConnectionRefusedError:
+    print("server not running")
+finally:
+    sock.close()
+```
+
+---
+
+### Лабораторная 4: Pickle и UDP (два приложения в одной папке)
+
+В одной лабораторной два небольших приложения: **pickle-эхо** (порт 9090) и **UDP-эхо** (порт 9091). Положите код в подпапки `pickle/` и `udp/`, один `result.txt` с выводом обоих.
+
+**4.1 Pickle** (`lab04_pickle_and_udp/pickle/`) — передача словаря по TCP: `pickle.dumps(obj)` → байты, `pickle.loads(bytes)` → объект. Pickle используйте только с доверенными узлами; для недоверенных данных — JSON.
+
+Сервер (порт 9090):
+
+```python
+import socket, pickle
+sock = socket.socket()
+sock.bind(('', 9090))
+sock.listen(1)
+conn, addr = sock.accept()
+data = conn.recv(4096)
+conn.send(data)
+conn.close()
+sock.close()
+```
+
+Клиент:
+
+```python
+import socket, pickle
+sock = socket.socket()
+sock.connect(('localhost', 9090))
+sock.send(pickle.dumps({"name": "alice", "n": 42}))
+print("echo", pickle.loads(sock.recv(4096)))
+sock.close()
+```
+
+**4.2 UDP** (`lab04_pickle_and_udp/udp/`) — протокол без установления соединения: `recvfrom()` / `sendto()`, порт 9091, **SOCK_DGRAM**.
+
+Сервер:
+
+```python
+import socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.bind(('', 9091))
+while True:
+    data, addr = sock.recvfrom(1024)
+    sock.sendto(data, addr)
+```
+
+Клиент:
+
+```python
+import socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.sendto(b"hello udp", ('localhost', 9091))
+print("echo", sock.recvfrom(1024)[0].decode())
+sock.close()
+```
+
+---
+
+### Лабораторная 5: Банк (TCP + JSON)
+
+Клиент отправляет JSON-запрос (balance / deposit / withdraw), сервер отвечает JSON. Порт **9092**.
+
+**Сервер** (`lab05_bank_json/server.py`):
+
+```python
+import socket
+import json
+
+
+class Bank:
+    """Хранит баланс счёта и предоставляет три операции."""
+
+    def __init__(self, initial=0):
+        self._balance = initial
+
+    def balance(self):
+        return self._balance
+
+    def deposit(self, amount):
+        self._balance += amount
+        return self._balance
+
+    def withdraw(self, amount):
+        if amount <= self._balance:
+            self._balance -= amount
+            return self._balance
+        return None  # недостаточно средств
+
+
+PORT = 9092
+bank = Bank()
+
+sock = socket.socket()
+sock.bind(('', PORT))
+sock.listen(1)
+print("Bank server on port", PORT)
+
+conn, addr = sock.accept()
+print("client", addr)
+
+# 1. Принять байты и разобрать JSON
+data = conn.recv(1024).decode()
+req = json.loads(data)
+
+# 2. Обработать запрошенное действие
+action = req.get("action")
+if action == "balance":
+    reply = {"ok": True, "balance": bank.balance()}
+elif action == "deposit":
+    amount = req.get("amount", 0)
+    bank.deposit(amount)
+    reply = {"ok": True, "balance": bank.balance()}
+elif action == "withdraw":
+    amount = req.get("amount", 0)
+    result = bank.withdraw(amount)
+    if result is not None:
+        reply = {"ok": True, "balance": result}
+    else:
+        reply = {"ok": False, "error": "insufficient funds", "balance": bank.balance()}
+else:
+    reply = {"ok": False, "error": "unknown action"}
+
+# 3. Отправить JSON-ответ
+conn.send(json.dumps(reply).encode())
+conn.close()
+sock.close()
+```
+
+**Клиент** (`lab05_bank_json/client.py`): ввод действия (balance / deposit / withdraw) и суммы при необходимости; один JSON-запрос, вывод ответа.
+
+```python
+import socket
+import json
+
+action = input("Action (balance / deposit / withdraw): ").strip().lower()
+request = {"action": action}
+if action in ("deposit", "withdraw"):
+    amount = int(input("Amount: ").strip())
+    request["amount"] = amount
+
+sock = socket.socket()
+sock.connect(('localhost', 9092))
+sock.send(json.dumps(request).encode())
+data = sock.recv(1024).decode()
+sock.close()
+
+reply = json.loads(data)
+if reply.get("ok"):
+    print("Balance:", reply["balance"])
+else:
+    print("Error:", reply.get("error", "unknown"))
+```
+
+
+**Проверка:** Запустите сервер, затем клиент. Введите `balance`, или `deposit` и сумму, или `withdraw` и сумму, и наблюдайте вывод.
+
+---
+
+## 2c. Упражнения (по желанию)
+
+Дополните пропуски. Опирайтесь на раздел 1 и код лабораторных 1–5. Подсказки используйте первыми; ответы — после попытки.
+
+---
+
+### Упражнение A: Echo-клиент (TCP)
+
+**Задание:** Заполните пропуски так, чтобы клиент подключался к серверу на порту 9090, отправлял сообщение, получал эхо и выводил его.
+
+```python
+import socket
+
+sock = _______________          # (1) Создать TCP-сокет
+sock.___(('localhost', 9090))  # (2) Подключиться к серверу
+sock.___(b"hello")             # (3) Отправить байты
+data = sock.___(______)        # (4) Принять (макс. байт)
+sock.___()                     # (5) Закрыть сокет
+print(data.___())              # (6) Преобразовать байты в строку
+```
+
+**Подсказки:**
+
+| Пропуск | Подсказка |
+|---------|-----------|
+| (1) | В стандартном модуле socket есть класс `socket`. Вызовите его без аргументов для TCP: `socket.socket()`. |
+| (2) | Метод сокета для установки TCP-соединения с (хост, порт). |
+| (3) | Метод передачи байтов серверу. |
+| (4) | Метод чтения входящих байтов; аргумент — максимальное число байт (используйте 1024). |
+| (5) | Метод освобождения сокета и закрытия соединения. |
+| (6) | Метод объекта `bytes`, возвращающий строку в кодировке по умолчанию (UTF-8). |
+
+
+---
+
+### Упражнение B: Многоразовый сервер — цикл accept
+
+**Задание:** Сервер должен принимать новых клиентов после отключения каждого. Заполните пропуски.
+
+```python
+import socket
+
+sock = socket.socket()
+sock.bind(('', 9090))
+sock.listen(1)
+print("server listening")
+_____ _____:                    # (1) Бесконечный цикл
+    conn, addr = sock._____()   # (2) Ожидать клиента
+    print("client", addr)
+    data = conn.recv(1024)
+    conn.send(data)
+    _____._____()               # (3) Закрыть соединение (не sock)
+print("done")
+```
+---
+
+### Упражнение C: UDP echo-клиент
+
+**Задание:** Заполните пропуски так, чтобы клиент отправлял сообщение UDP-серверу на порту 9091 и получал эхо. (Сначала запустите UDP-сервер из шага 6.)
+
+```python
+import socket
+
+sock = socket.socket(socket.AF_INET, _______________)   # (1) UDP-сокет
+sock.___(b"hello udp", (_______________, _____))        # (2) Отправить по (хост, порт)
+data, addr = sock.___(1024)                             # (3) Принять (возвращает данные и адрес отправителя)
+print("echo", data.decode())
+sock.close()
+```
+
+**Подсказки:**
+
+| Пропуск | Подсказка |
+|---------|-----------|
+| (1) | Для UDP используется другой тип сокета. См. «TCP и UDP» в разделе 1; константа — `SOCK_DGRAM`. |
+| (2) | В UDP нет connect; каждое сообщение отправляется по адресу. Метод: `sendto(data, (host, port))`. Используйте `'localhost'` и `9091`. |
+| (3) | Метод приёма дейтаграммы, возвращающий и данные, и адрес отправителя. |
+
+---
+
+### Упражнение D: Отправка текста (encode) и приём (decode)
+
+**Задание:** Клиент должен отправить строку `"hello"` в виде байтов и вывести полученную эхо-строку. Заполните пропуски.
+
+```python
+import socket
+
+sock = socket.socket()
+sock.connect(('localhost', 9090))
+msg = "hello"
+sock.___(msg.___( ))      # (1) Отправить строку как байты
+data = sock.recv(1024)
+sock.close()
+print(data.___( ))        # (2) Преобразовать принятые байты в строку
+```
+
+**Подсказки:**
+
+| Пропуск | Подсказка |
+|---------|-----------|
+| (1) | По сокетам передаются **байты**. Используйте метод сокета для отправки и метод строки для преобразования в байты (например UTF-8). |
+| (2) | Метод байтов, возвращающий строку (обратно к encode). |
+
+---
+
+## 3. Контрольные вопросы и ответы
+
+**1. Чем отличаются сокеты клиента и сервера?**
+
+Ролью и API. **Серверный** сокет **привязан** к (хост, порт), затем **слушает** и **принимает**; для каждого клиента он получает **новый** сокет для **recv**/**send**. **Клиентский** сокет **подключается** и использует один сокет для **send**/**recv**.
+
+**2. Как передавать текст через сокеты?**
+
+По сокетам передаются байты. Используйте **encode()** перед отправкой и **decode()** после приёма; на обеих сторонах — одна и та же кодировка (например UTF-8). Для нескольких сообщений задайте границы (например строка или префикс длины), так как TCP — поток байтов.
+
+**3. Какие операции с сокетами блокируют выполнение программы?**
+
+**accept()** блокируется до подключения клиента. **recv(n)** блокируется до появления данных (до n байт) или закрытия соединения (тогда возвращаются пустые байты). **connect()** блокируется до установки соединения или ошибки. **send()** может блокироваться при переполнении буфера отправки. Используйте **sock.settimeout(секунды)** для ограничения ожидания; тогда эти операции могут возбуждать **socket.timeout**.
+
+**4. Что такое неблокирующие сокеты?**
+
+Сокеты, которые возвращают управление сразу, не ожидая. Устанавливаются через **sock.setblocking(False)** или **sock.settimeout(0)**. Тогда **accept()**, **recv()**, **connect()** либо сразу завершаются успехом, либо возбуждают ошибку (например **BlockingIOError**). Программа должна опрашивать сокет или использовать мультиплексирование (например **select**, асинхронный ввод-вывод).
+
+**5. Какие преимущества и недостатки TCP по сравнению с UDP?**
+
+**TCP:** Надёжная доставка в порядке отправки; ориентация на соединение; подходит для большинства приложений. Недостатки: большие накладные расходы и задержка; одно соединение на клиента. **UDP:** Без соединения; малые накладные расходы; один сокет может отправлять по разным адресам; удобен, когда важна скорость и допустимы потери. Недостатки: нет гарантий доставки и порядка. По умолчанию используйте TCP; UDP — когда задержка важнее надёжности.
+
+**6. Какие вызовы, связанные с сокетами, используются только на стороне сервера?**
+
+**bind()**, **listen()** и **accept()**. Клиент использует **connect()** и не вызывает **bind()** (ОС назначает эфемерный порт), **listen()** или **accept()**.
+
+**7. На каком уровне модели OSI работают сокеты?**
+
+**Уровень 4 — транспортный.** API сокетов — это программный интерфейс на границе между прикладным уровнем (L7) и транспортным уровнем (L4). Приложения используют сокеты для доступа к TCP и UDP; ОС реализует сетевой уровень (например IP) и ниже.
+
+```mermaid
+flowchart TB
+  L7["Уровень 7 — Прикладной (HTTP, FTP, ваша программа)"]
+  L4["Уровень 4 — Транспортный: TCP / UDP — здесь API сокетов"]
+  L3["Уровень 3 — Сетевой: IP (маршрутизация между узлами)"]
+  L2["Уровень 2 — Канальный: Ethernet, Wi-Fi"]
+  L7 --> L4 --> L3 --> L2
+```
+
+Уровни 5 (сеансовый) и 6 (представления) для простоты опущены. API сокетов — граница между кодом приложения (уровень 7) и сетевым стеком ОС (уровень 4 и ниже). Вы пишете в сокет; ОС обеспечивает маршрутизацию IP, кадрирование и передачу.

@@ -159,6 +159,7 @@ git add .
 git commit -m "Лабораторная: основы сетевого программирования с сокетами — выполнено"
 git branch -M main
 git remote add origin https://github.com/VASH_LOGIN/VASH_REPO.git
+git pull origin main --allow-unrelated-histories
 git push -u origin main
 ```
 
